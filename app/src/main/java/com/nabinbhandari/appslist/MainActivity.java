@@ -1,6 +1,8 @@
 package com.nabinbhandari.appslist;
 
 import android.app.Activity;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -15,11 +17,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
+
+    private List<UsageStats> usageStats;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,10 +39,75 @@ public class MainActivity extends Activity {
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                if (usageStats == null) {
+                    Toast.makeText(MainActivity.this, "Usage access not provided.",
+                            Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
                 ApplicationInfo info = (ApplicationInfo) parent.getAdapter().getItem(position);
-                Toast.makeText(MainActivity.this, info.packageName, Toast.LENGTH_SHORT).show();
+                UsageStats stat = findUsageStatByPackageName(info.packageName);
+                if (stat == null) {
+                    String message = "Usage statistics not found in the last day for " + info.packageName;
+                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(MainActivity.this, getStatDesc(stat), Toast.LENGTH_SHORT).show();
+                }
             }
         });
+
+        if (!AppUsagePermissions.hasUsageAccess(this)) {
+            AppUsagePermissions.requestAppUsageAccessPermission(this);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (AppUsagePermissions.hasUsageAccess(this)) {
+            collectStats();
+        } else {
+            Toast.makeText(this, "Usage access not provided.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void collectStats() {
+        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return;
+
+        long currentTime = System.currentTimeMillis();
+        int millisPerDay = 24 * 3600 * 1000;
+        usageStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY,
+                currentTime - millisPerDay, currentTime);
+        for (UsageStats stat : usageStats) {
+            System.err.println(stat.toString() + stat.getPackageName() + " - " +
+                    stat.getLastTimeUsed() + " - " + stat.getTotalTimeInForeground());
+        }
+    }
+
+    private UsageStats findUsageStatByPackageName(String packageName) {
+        for (UsageStats stat : usageStats) {
+            if (packageName.equalsIgnoreCase(stat.getPackageName())) {
+                return stat;
+            }
+        }
+        return null;
+    }
+
+    private static String getStatDesc(UsageStats usageStats) {
+        return "Daily usage stats:\n" + usageStats.getPackageName() +
+                "\nLast time used: " + parseTime(usageStats.getLastTimeUsed()) +
+                "\nTime in Foreground: " + millisToStr(usageStats.getTotalTimeInForeground());
+    }
+
+    private static String parseTime(long timeInMillis) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(timeInMillis);
+        return calendar.getTime().toString();
+    }
+
+    private static String millisToStr(long millis) {
+        return String.format(Locale.US, "%.2f s.", millis / 1000f);
     }
 
     private List<ApplicationInfo> listApps() {

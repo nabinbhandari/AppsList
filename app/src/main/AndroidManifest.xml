@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.nabinbhandari.appslist">
 
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
